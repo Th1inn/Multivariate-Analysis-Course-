@@ -1,0 +1,103 @@
+---
+title: "BusDelay_Month"
+author: "tonghua.lin@rutgers.edu"
+date: "2/17/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+
+```{r}
+# Read the data to DataSet
+library(readr)
+DataSet <- read_csv("./BUS_OTP_DATA.csv")
+print(DataSet)
+
+```
+
+```{r}
+# Since we get data from different years, was all of the data columns stable? 
+# Use uni-variable chart to visualize 
+library(ggplot2)
+library(patchwork)
+
+TotalLateLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = TOTAL_LATES, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "Years", y = "Total_Lates", title ="Annually Trend of Delays by Month")
+
+OTPLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = OTP, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Years", y = "OTP", title ="Annually Trend of OTP by Month")
+
+TotalTripsLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = TOTAL_TRIPS, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "Years", y = "Total_Trips", title ="Annually Trend of Trips by Month")
+
+
+CombinedPlot <- TotalLateLinePlot / OTPLinePlot / TotalTripsLinePlot
+CombinedPlot + plot_layout(guides = 'collect')
+
+
+# Obviously, there are some common trends between different years.
+# The normalization is necessary.
+```
+
+```{r}
+# Normalize the data
+for (i in 2009:2023){
+  means <- colMeans(DataSet[DataSet$OTP_YEAR==i,3:5])
+  DataSet[DataSet$OTP_YEAR==i,3:5] <- DataSet[DataSet$OTP_YEAR==i,3:5] - means
+}
+
+TotalLateLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = TOTAL_LATES, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "Years", y = "Total_Lates", title ="Annually Trend of Delays by Month")
+
+OTPLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = OTP, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Years", y = "OTP", title ="Annually Trend of OTP by Month")
+
+TotalTripsLinePlot <- ggplot(DataSet, aes(x = OTP_YEAR, y = TOTAL_TRIPS, color = OTP_MONTH, linetype = OTP_MONTH)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "Years", y = "Total_Trips", title ="Annually Trend of Trips by Month")
+
+
+CombinedPlot <- TotalLateLinePlot / OTPLinePlot / TotalTripsLinePlot
+CombinedPlot + plot_layout(guides = 'collect')
+```
+
+```{r}
+# Use histogram to check the distribution
+ggplot(DataSet, aes(TOTAL_LATES)) +
+facet_wrap(c("OTP_MONTH")) +
+geom_histogram(binwidth = 800)
+
+# We can see different month have different means, which is a interesting point
+# Around the mean, each month has a good nomal-like distribution
+```
+
+```{r}
+# Use stars plot to check the difference of multivariate distribution between month, take 2020 as example
+par(mfrow = c(1, 2))
+stars(DataSet[DataSet$OTP_YEAR==2020,],label=DataSet$OTP_MONTH)
+
+# Obviously, we can see data pattern is different between odd months and even months, which is quite wield
+```
+
+```{r}
+# Use combined pairs plot to check the bivariate relation
+library(GGally)
+ggscatmat(DataSet, columns=3:5, color="OTP_MONTH")
+
+# We should divide the data into two parts according to the results.
+```
+
