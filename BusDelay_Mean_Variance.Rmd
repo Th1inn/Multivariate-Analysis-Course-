@@ -1,0 +1,127 @@
+---
+title: "BusDelay_Month_Mean_Variance"
+author: "tonghua.lin@rutgers.edu"
+date: "2/25/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+
+```{r}
+# Read the data to DataSet
+library(readr)
+DataSet <- read_csv("./BUS_OTP_DATA.csv")
+print(DataSet)
+
+```
+
+```{r}
+# Calculate the mean and variance of the OTP, Total_trips and Total_lates
+# to check the distribution of the data
+
+numDataset <- DataSet[,3:5]
+
+cm <- colMeans(numDataset)
+S <- cov(numDataset)
+d <- apply(numDataset,MARGIN=1,function(x)t(x-cm)%*%solve(S)%*%(x-cm))
+d
+
+```
+
+```{r}
+S
+```
+
+```{r}
+cm
+```
+
+```{r}
+qqnorm(numDataset$OTP)
+qqline(numDataset$OTP)
+```
+
+```{r}
+qqnorm(numDataset$TOTAL_LATES)
+qqline(numDataset$TOTAL_LATES)
+```
+```{r}
+qqnorm(numDataset$TOTAL_TRIPS)
+qqline(numDataset$TOTAL_TRIPS)
+```
+```{r}
+# We can see that the distribution is not that normal.
+# As the last analysis said, the data is not stable between different year, so a normalization is need.
+for (i in 2009:2023){
+  means <- colMeans(DataSet[DataSet$OTP_YEAR==i,3:5])
+  DataSet[DataSet$OTP_YEAR==i,3] <- DataSet[DataSet$OTP_YEAR==i,3] - means[1]+92.4
+  DataSet[DataSet$OTP_YEAR==i,4] <- DataSet[DataSet$OTP_YEAR==i,4] - means[2]+42222.8
+  DataSet[DataSet$OTP_YEAR==i,5] <- DataSet[DataSet$OTP_YEAR==i,5] - means[3]+3188.37244
+}
+numDataset <- DataSet[,3:5]
+
+cm <- colMeans(numDataset)
+S <- cov(numDataset)
+d <- apply(numDataset,MARGIN=1,function(x)t(x-cm)%*%solve(S)%*%(x-cm))
+d
+```
+```{r}
+S
+```
+```{r}
+cm
+```
+```{r}
+qqnorm(numDataset$OTP)
+qqline(numDataset$OTP)
+```
+```{r}
+qqnorm(numDataset$TOTAL_TRIPS)
+qqline(numDataset$TOTAL_TRIPS)
+```
+
+```{r}
+qqnorm(numDataset$TOTAL_LATES)
+qqline(numDataset$TOTAL_LATES)
+```
+```{r}
+# we can see that the distribution is more normal now
+# End of Normal Distribution Check
+
+# I want to check the relationship between total delay and month
+# But before that we can check the OTP, total trips first to decide whether use them as dependent variables
+
+with(data=numDataset,t.test(numDataset$OTP,numDataset$TOTAL_LATES,var.equal=TRUE))
+
+```
+```{r}
+with(data=numDataset,t.test(numDataset$TOTAL_TRIPS,numDataset$TOTAL_LATES,var.equal=TRUE))
+
+# we can see that obviously their relationship is significant.
+```
+```{r}
+# Now check the month and total delay, use Jan and Feb as an example
+with(data=numDataset,t.test(numDataset$TOTAL_LATES[DataSet$OTP_MONTH=="Jan"],numDataset$TOTAL_LATES[DataSet$OTP_MONTH=="Feb"],var.equal=TRUE))
+```
+```{r}
+# Also check Jan and May
+with(data=numDataset,t.test(numDataset$TOTAL_LATES[DataSet$OTP_MONTH=="Jan"],numDataset$TOTAL_LATES[DataSet$OTP_MONTH=="May"],var.equal=TRUE))
+```
+```{r}
+# We can see some month has significant influence while some month doesn't
+```
+
+```{r}
+rmarkdown::render("BusDelay_Mean_Variance.Rmd")
+
+```
+
+
+
+
+
+
+
