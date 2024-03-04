@@ -1,0 +1,126 @@
+---
+title: "BusDelay_PCA"
+author: "tonghua.lin@rutgers.edu"
+date: "3/3/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+# Read the data to DataSet
+library(readr)
+DataSet <- read_csv("./BUS_OTP_DATA.csv")
+print(DataSet)
+
+```
+
+```{r}
+# Process the normalization between years firstly.
+for (i in 2009:2023){
+  means <- colMeans(DataSet[DataSet$OTP_YEAR==i,3:5])
+  DataSet[DataSet$OTP_YEAR==i,3] <- DataSet[DataSet$OTP_YEAR==i,3] - means[1]+92.4
+  DataSet[DataSet$OTP_YEAR==i,4] <- DataSet[DataSet$OTP_YEAR==i,4] - means[2]+42222.8
+  DataSet[DataSet$OTP_YEAR==i,5] <- DataSet[DataSet$OTP_YEAR==i,5] - means[3]+3188.37244
+}
+numDataset <- DataSet[,3:5]
+
+# Check the correlations between different columns
+cor(numDataset)
+```
+
+```{r}
+
+# Process the PCA
+busPCA <- prcomp(numDataset,scale=TRUE)
+busPCA
+summary(busPCA)
+```
+
+```{r}
+# Some analysis about the PCs, include eigenvalues, variance percentage and povit
+
+(eigen_bus <- busPCA$sdev^2)
+names(eigen_bus) <- paste("PC",1:3,sep="")
+sumlambdas <- sum(eigen_bus)
+propvar <- eigen_bus/sumlambdas
+cumvar_bus <- cumsum(propvar)
+matlambdas <- rbind(eigen_bus,propvar,cumvar_bus)
+rownames(matlambdas) <- c("Eigenvalues","Variance","Accumulative variance")
+round(matlambdas,4)
+summary(busPCA)
+```
+
+```{r}
+# Get the formula for PCs
+busPCA$rotation
+print(busPCA)
+
+```
+
+```{r}
+# Here, I want to keep PC1 and PC2, because the sum or their variance can explain 99%.
+# For each PC, here is the formula:
+# PC1 = 0.6569 * OTP - 0.2301 * TOTAL_TRIPS - 0.7180 * TOTAL_LATES
+# PC2 = -0.3950 * OTP - 0.9162 * TOTAL_TRIPS - 0.3280 * TOTAL_LATES
+# PC3 = 0.6422 * OTP - 0.3280 * TOTAL_TRIPS + 0.6928 * TOTAL_LATES
+
+```
+
+```{r}
+# Visualization of PCs
+library(factoextra)
+library(FactoMineR)
+library(ggfortify)
+library(psych)
+library(corrplot)
+library(devtools)
+
+# Correlation
+pairs.panels(DataSet[3:5],
+             gap = 0,
+             bg = c("red", "blue")[DataSet$OTP_MONTH],
+             pch=21)
+```
+
+```{r}
+pairs.panels(busPCA$x,
+             gap=0,
+             bg = c("red", "blue")[DataSet$OTP_MONTH],
+             pch=21)
+```
+
+```{r}
+fviz_eig(busPCA, addlabels = TRUE)
+```
+
+```{r}
+fviz_pca_var(busPCA,col.var = "cos2",
+             gradient.cols = c("#FFCC00", "#CC9933", "#660033", "#330033"),
+             repel = TRUE)
+```
+
+```{r}
+fviz_pca_ind(busPCA, col.ind = "cos2", 
+                  gradient.cols = c("#FFCC00", "#CC9933", "#660033", "#330033"), 
+                  repel = TRUE)
+```
+
+```{r}
+biplot(busPCA)
+```
+
+```{r}
+autoplot(busPCA,
+         data = DataSet[3:5],
+         loadings = TRUE,
+         labels = DataSet$OTP_MONTH)
+
+```
