@@ -1,0 +1,112 @@
+---
+title: "BusDelay_Cluster"
+author: "tonghua.lin@rutgers.edu"
+date: "3/8/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+# Read the data to DataSet
+library(readr)
+DataSet <- read_csv("./BUS_OTP_DATA.csv")
+print(DataSet)
+
+```
+
+```{r}
+# Process the normalization between years firstly.
+for (i in 2009:2023){
+  means <- colMeans(DataSet[DataSet$OTP_YEAR==i,3:5])
+  DataSet[DataSet$OTP_YEAR==i,3] <- DataSet[DataSet$OTP_YEAR==i,3] - means[1]+92.4
+  DataSet[DataSet$OTP_YEAR==i,4] <- DataSet[DataSet$OTP_YEAR==i,4] - means[2]+42222.8
+  DataSet[DataSet$OTP_YEAR==i,5] <- DataSet[DataSet$OTP_YEAR==i,5] - means[3]+3188.37244
+}
+numDataset <- DataSet[DataSet$OTP_YEAR==2018,3:5]
+row.names(numDataset) <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nev","Dec")
+
+```
+
+```{r}
+library(cluster)
+library(readr)
+library(factoextra)
+library(magrittr)
+library(NbClust)
+
+# Use hierarchical model first.
+busStd <- scale(numDataset)
+busDist <- dist(busStd, method="euclidean")
+clusBus <- hclust(busDist, method = "single") 
+plot(as.dendrogram(clusBus),ylab="Distance between Month",ylim=c(0,2.5),main="Dendrogram of Month (method = single)")
+# Considering the distances, I think we should divide model to 4 groups.
+# Group1 {Dec, Jun, Jul}
+# Group2 {Sep, Nev}
+# Group3 {Oct, May, Apr, Jan, Aug}
+# Group4 {Feb, Mar}
+```
+
+```{r}
+# K-Means Clustering
+(kmeans2 <- kmeans(busStd,2,nstart = 10))
+perc2 <- round(100*(1 - kmeans2$betweenss/kmeans2$totss),1)
+
+(kmeans3 <- kmeans(busStd,3,nstart = 10))
+perc3 <- round(100*(1 - kmeans3$betweenss/kmeans3$totss),1)
+
+(kmeans4 <- kmeans(busStd,4,nstart = 10))
+perc4 <- round(100*(1 - kmeans4$betweenss/kmeans4$totss),1)
+
+(kmeans5 <- kmeans(busStd,5,nstart = 10))
+perc5 <- round(100*(1 - kmeans5$betweenss/kmeans5$totss),1)
+
+(kmeans6 <- kmeans(busStd,6,nstart = 10))
+perc6 <- round(100*(1 - kmeans6$betweenss/kmeans6$totss),1)
+
+(kmeans7 <- kmeans(busStd,7,nstart = 10))
+perc7 <- round(100*(1 - kmeans7$betweenss/kmeans7$totss),1)
+
+Variance_List <- c(perc2,perc3,perc4,perc5,perc6,perc6)
+
+plot(c(2:7),Variance_List,xlab="number of groups")
+
+# Obviously, 4 groups is the best choice
+```
+```{r}
+# Another way to find the best number of groups
+fviz_nbclust(busStd, kmeans, method = "gap_stat")
+# Still, 4 groups have the best performance
+```
+```{r}
+# Saving four k-means clusters in a list
+clus1 <- matrix(names(kmeans4$cluster[kmeans4$cluster == 1]), 
+                ncol=1, nrow=length(kmeans4$cluster[kmeans4$cluster == 1]))
+colnames(clus1) <- "Cluster 1"
+clus2 <- matrix(names(kmeans4$cluster[kmeans4$cluster == 2]), 
+                ncol=1, nrow=length(kmeans4$cluster[kmeans4$cluster == 2]))
+colnames(clus2) <- "Cluster 2"
+clus3 <- matrix(names(kmeans4$cluster[kmeans4$cluster == 3]), 
+                ncol=1, nrow=length(kmeans4$cluster[kmeans4$cluster == 3]))
+colnames(clus3) <- "Cluster 3"
+clus4 <- matrix(names(kmeans4$cluster[kmeans4$cluster == 4]), 
+                ncol=1, nrow=length(kmeans4$cluster[kmeans4$cluster == 4]))
+colnames(clus4) <- "Cluster 4"
+list(clus1,clus2,clus3,clus4)
+```
+```{r}
+km <- kmeans(busStd, 4, nstart = 10)
+# Visualize
+fviz_cluster(km, data = busStd,
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal())
+```
+
