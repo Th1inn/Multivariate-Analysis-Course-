@@ -1,0 +1,39 @@
+---
+title: "Fitbit Fitness Watch EFA"
+author: "tonghua.lin@rutgers.edu"
+date: "3/24/2024"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(psych)
+
+#This dataset contains personal fitness tracker from thirty three eligible Fitbit users. 
+
+fitbit <- read.csv("dailyActivity_merged_cleaned.csv")
+
+#Drop the first two column: assume the data is stable between time and users
+fitbitHomo <- fitbit[,3:15]
+fitbitHomo[1:30,]
+#Try to get the best 
+fa.parallel(fitbitHomo[-1]) 
+
+#From the plot, we can see 3 is the best RC number
+fit <- principal(fitbitHomo[-1],nfactors=3,rotate="varimax")
+fit
+#The loadings show that if we set 3 RCs, the distance, Minutes, Calories etc. should go to RC1
+#And if we use 3 RCs, the 70% of variance can be explained.
+fit$loadings
+
+fit$scores[1:30,]
+
+fa.plot(fit)
+#From the factor model, RC1 can be named as high intensity exercise, while RC2 and RC3 is lightly exercise and lie down repectively
+fa.diagram(fit)
+
+fitbitHomo_pca <- prcomp(fitbitHomo[-1], scale=TRUE)
+summary(fitbitHomo_pca)
+plot(fitbitHomo_pca)
+```
