@@ -1,0 +1,90 @@
+---
+title: "BusDelay_Multiple_Regression"
+author: "tonghua.lin@rutgers.edu"
+date: "4/14/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+For this data set, I want to set total lates as th output, and see which variables will significantly influence the output. The independent varibles are years, month, OTP and total trips.
+```{r}
+# Read the data to DataSet
+library(readr)
+DataSet <- read_csv("./BUS_OTP_DATA.csv")
+print(DataSet)
+
+```
+
+Assume the total lates will change stably by years, here we have years, OTP and total trips as numerical variables. For month, we need to set dummy variables with n-1 rule. Assume January is the base.
+```{r}
+# Created dummies for month.
+DataSet$OTP_MONTH <- factor(DataSet$OTP_MONTH, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+dummies <- model.matrix(~ OTP_MONTH, data = DataSet)
+dummies <- dummies[, -1]
+colnames(dummies) <- month.abb[-1]
+DataSetDum <- cbind(DataSet, dummies)
+DataSetDum$OTP_MONTH<-NULL
+print(DataSetDum)
+
+```
+With the processed data, we can start a multiple regression.
+```{r}
+# Performing multiple regression
+fit <- lm(TOTAL_LATES~OTP_YEAR+OTP+TOTAL_TRIPS+Feb+Mar+Apr+May+Jun+Jul+Aug+Sep+Oct+Nov+Dec, data=DataSetDum)
+#show the results
+summary(fit)
+coefficients(fit)
+```
+From the result, we can see that there are many insignificant variables. Here, we can choose significant variables to rerun the regression model to get better results.
+```{r}
+fit <- lm(TOTAL_LATES~OTP+TOTAL_TRIPS+May, data=DataSetDum)
+#show the results
+summary(fit)
+coefficients(fit)
+```
+With the result, we can see the R-squared value of the model is 0.98, which is a highly acceptable result. Also, remaining variables are all significant. Now, we can run a residual analysis.
+```{r}
+#start a residual analysis
+library(ggplot2)
+library(GGally)
+ggpairs(data=DataSetDum, title="Cars Data")
+confint(fit,level=0.95)
+fitted(fit)
+residuals(fit)
+#Anova Table
+anova(fit)
+vcov(fit)
+cov2cor(vcov(fit))
+temp <- influence.measures(fit)
+temp
+plot(fit)
+```
+From the results, we can see the residual distribution is quite reasonable. Again, this proves the validation of the model. We can use the model to predict an output if we have data.
+```{r}
+predict.lm(fit, data.frame(OTP=95 ,TOTAL_TRIPS=32000,May=0))
+```
+Also, we can divide the data to two part and use the prediction result to check the accuracy of the model.
+```{r}
+# Randomize rows
+set.seed(123)  # Setting a seed to make the randomization reproducible
+randomized <- DataSetDum[sample(nrow(DataSetDum)), ][,c("OTP","TOTAL_TRIPS","TOTAL_LATES","May")]
+# Reset row names to avoid confusion
+row.names(randomized) <- NULL
+print(randomized)
+data_train=randomized[1:150,]
+data_test=randomized[151:180,]
+fit2 <- lm(TOTAL_LATES~OTP+TOTAL_TRIPS+May, data=data_train)
+summary(fit2)
+predict_lates <- predict.lm(fit2,data_test)
+difference = predict_lates - data_test$TOTAL_LATES
+accuracy <- 1 - mean(abs(difference))/mean(data_test$TOTAL_LATES)
+print(accuracy)
+```
+We can see the accuracy of the model can be 98%.
