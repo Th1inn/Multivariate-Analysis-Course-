@@ -1,0 +1,59 @@
+---
+title: "Social_Logistic_Regression"
+author: "tonghua.lin@rutgers.edu"
+date: "4/14/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+For this data set, I want to check the relationship between trouble sleep with other variables. We need to clean the data first.
+
+```{r}
+library(readr)
+DataSet <- read_csv("Social Media.csv")
+DataSet$'Application type(Social media, OTT, Learning)'<-NULL
+#drop the string column and all APP Yes/No column since time=0 means No
+DataSet$Linkedin <- NULL
+DataSet$Whatsapp <- NULL
+DataSet$ApplicationType <- NULL
+DataSet$Instagram <- NULL
+DataSet$Snapchat <- NULL
+DataSet$Twitter <- NULL
+DataSet$Youtube <- NULL
+DataSet$OTT <- NULL
+DataSet$Reddit <-NULL
+DataSet$ID <- NULL
+DataSet$Mood <- NULL
+DataSet$WeekFelt <- NULL
+
+#change the unit of hms variables to minutes
+hms_columns <- sapply(DataSet, inherits, "hms")
+DataSet[hms_columns] <- lapply(DataSet[hms_columns], function(x) as.numeric(x) / 60)
+print(DataSet)
+```
+Change JobInterview, Network, Learning Item, Mood, TiredWakeUp and WeekFelt to factors.
+```{r}
+
+
+DataSet$TroubleSleep <- as.factor(DataSet$TroubleSleep)
+str(DataSet)
+```
+TirdeWakeUp may be important for troubleSleep intuitively. We can check with a simple regression.
+```{r}
+logistic_simple <- glm(TroubleSleep ~ TiredWakeUP, data=DataSet, family="binomial")
+summary(logistic_simple)
+```
+Not very significant. Let's check other variables.
+```{r}
+logistic <- glm(TroubleSleep ~ ., data=DataSet, family="binomial")
+summary(logistic)
+```
+The results show that DataSet is too small to get some logistic regression model.
+
