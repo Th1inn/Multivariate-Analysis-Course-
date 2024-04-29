@@ -1,0 +1,181 @@
+---
+title: "Airbnb_price_analysis_project"
+author: "tonghua.lin@rutgers.edu"
+date: "4/28/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Besides the chain hotels, Airbnb is another way to find a lodge while traveling. This project is trying to find the factors that can influence the price of a lodge, especially the location and city of a lodge. This can help to find a good place for holiday trips.
+
+1.Explain the data collection process
+The data set is downloaded from Kaggle. It originally contains 29 columns and around 73000 rows, but needs to be cleaned up. Several description text type variables are excluded for data analysis. Also, neighbourhood and zipcode is excluded because the data set has latitude and longitude for location, while it's hard to divided various neighbourhood and zipcode as category variables.
+```{r}
+library(readr)
+DataSet <- read_csv("Airbnb_Data.csv")
+# Set the ID as the name of rows, exclude some descriptive columns
+DataSet$id <- NULL
+DataSet$property_type <- NULL
+DataSet$amenities <- NULL
+DataSet$description <- NULL
+DataSet$name <- NULL
+DataSet$thumbnail_url <- NULL
+DataSet$neighbourhood <- NULL
+DataSet$zipcode <-NULL
+
+head(DataSet)
+# Check the NA data rows
+sapply(DataSet, function(x) sum(is.na(x)))
+```
+From the NA check, we can see that there are lots of missing data. For bathrooms, we can set NA as 0. For first_review data, there are many NAs. That means they are never rented out, or no one give a review. Similar situation can be found in last_review, host_response_rate, review_score_rating. We can use the host_since date for the missing part. For the NA in host_since, we can see then number of missing rows is exactly same with host_identity_verified, and it's small. Let's drop these rows. For date variables, we can use 2017/11/01 as the baseline to calculate the interval. It can change the date variables to numerical variables. 
+```{r}
+# Remove rows with na host_identity_verified
+DataSet <- DataSet[!is.na(DataSet$host_identity_verified),]
+# Set na bathrooms to 0
+DataSet$bathrooms[is.na(DataSet$bathrooms)] <- 0
+# Use the host_since date for the na date
+DataSet$first_review[is.na(DataSet$first_review)] <- DataSet$host_since[is.na(DataSet$first_review)]
+DataSet$last_review[is.na(DataSet$last_review)] <- DataSet$host_since[is.na(DataSet$last_review)]
+baslineDate <- as.Date('2017/11/01')
+DataSet$first_review <- as.numeric(difftime(baslineDate, DataSet$first_review, units = "days"))
+DataSet$last_review <- as.numeric(difftime(baslineDate, DataSet$last_review, units = "days"))
+DataSet$host_since <- as.numeric(difftime(baslineDate, DataSet$host_since, units = "days"))
+# Use mean for na host_response_rate and scores
+DataSet$host_response_rate <- as.numeric(gsub("%", "", DataSet$host_response_rate))
+DataSet$host_response_rate[is.na(DataSet$host_response_rate)] <- mean(DataSet$host_response_rate[!is.na(DataSet$host_response_rate)])
+DataSet$review_scores_rating[is.na(DataSet$review_scores_rating)] <- mean(DataSet$review_scores_rating[!is.na(DataSet$review_scores_rating)])
+DataSet$bedrooms[is.na(DataSet$bedrooms)] <- 1
+DataSet$beds[is.na(DataSet$beds)] <- round(mean(DataSet$beds[!is.na(DataSet$beds)]))
+sapply(DataSet, function(x) sum(is.na(x)))
+head(DataSet)
+```
+2.Exploratory Data Analysis and Visualizations
+Several methods can be used to do preliminary analysis and visualizations. The mean and variance of log_price via different categories can be checked firstly, such as different cities.
+```{r}
+total_cm <- mean(DataSet$log_price)
+total_var <- var(DataSet$log_price)
+print("total mean:")
+print(total_cm)
+print("total var:")
+print(total_var)
+
+library(dplyr)
+
+# Calculating mean and variance of log_price for each city
+price_stats <- DataSet %>%
+  group_by(city) %>%
+  summarize(
+    mean_log_price = mean(log_price, na.rm = TRUE),
+    var_log_price = var(log_price, na.rm = TRUE),
+    count = n()
+  )
+print(price_stats)
+```
+Visualizations about MVA.
+```{r}
+library(ggplot2)
+
+# Plotting mean log prices by city
+ggplot(price_stats, aes(x = reorder(city, mean_log_price), y = mean_log_price, fill = city)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Mean Log Prices by City", x = "City", y = "Mean Log Price")
+
+# Plotting variance of log prices by city
+ggplot(price_stats, aes(x = reorder(city, var_log_price), y = var_log_price, fill = city)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Variance of Log Prices by City", x = "City", y = "Variance in Log Price")
+```
+Slight difference can be found from different city's price. Similar results can be found var room_type.
+```{r}
+# Calculating mean and variance of log_price for each room_type
+price_stats2 <- DataSet %>%
+  group_by(room_type) %>%
+  summarize(
+    mean_log_price2 = mean(log_price, na.rm = TRUE),
+    var_log_price2 = var(log_price, na.rm = TRUE),
+    count = n()
+  )
+
+
+ggplot(price_stats2, aes(x = reorder(room_type, mean_log_price2), y = mean_log_price2, fill = room_type)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Mean Log Prices by Room type", x = "Room type", y = "Mean Log Price")
+
+
+ggplot(price_stats2, aes(x = reorder(room_type, mean_log_price2), y = mean_log_price2, fill = room_type)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Variance of Log Prices by Room type", x = "Room type", y = "Variance in Log Price")
+```
+Also, T-test can be used to check the existence of differences.
+```{r}
+t.test(DataSet$log_price[DataSet$city == "NYC"],DataSet$log_price[DataSet$city == "LA"], alternative="less",var.equal = TRUE)
+t.test(DataSet$log_price[DataSet$city == "NYC"],DataSet$log_price[DataSet$city == "Boston"], alternative="less",var.equal = TRUE)
+t.test(DataSet$log_price[DataSet$room_type == "Private room"],DataSet$log_price[DataSet$room_type == "Shared room"], alternative="less",var.equal = TRUE)
+t.test(DataSet$log_price[DataSet$room_type == "Private room"],DataSet$log_price[DataSet$room_type == "Entire home/apt"], alternative="less",var.equal = TRUE)
+```
+From the results both in plots and T-test, we can see there are some difference of price between cities and room_type, which means that we can use other methods to find the detailed influence. Also, we can check multiple relationships by some visualizations.
+```{r}
+pairs(DataSet[,c(1,3,4,9,19)])
+```
+
+We can see some slight linear relationship between log price and other variables. Also, whether the location in a city would influence the prices is a interesting problem. We can check this by clustering first and check means.
+
+```{r}
+library(dplyr)
+
+# Determining the number of clusters with kmeans
+set.seed(105)  # for reproducibility
+coords <- DataSet[DataSet$city=="NYC",] %>% select(latitude, longitude)
+k <- 6  # You might need to adjust this number based on the city's geographical spread and data distribution
+clusters <- kmeans(coords, centers = k, nstart = 25)
+
+# Adding cluster information back to the dataset
+DataSet[DataSet$city=="NYC",]$cluster <- clusters$cluster
+
+# Visualizing clusters on a map
+ggplot(DataSet[DataSet$city=="NYC",], aes(x = longitude, y = latitude, color = factor(cluster))) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Geographical Clustering of Airbnb Listings", color = "Cluster")
+```
+```{r}
+# Calculating mean log_price for each cluster
+cluster_price_stats <- DataSet[DataSet$city=="NYC",] %>%
+  group_by(cluster) %>%
+  summarize(
+    mean_log_price = mean(log_price, na.rm = TRUE),
+    count = n()
+  )
+
+# Plotting
+ggplot(cluster_price_stats, aes(x = factor(cluster), y = mean_log_price, fill = factor(cluster))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Mean Log Prices by Geographical Cluster", x = "Cluster", y = "Mean Log Price")
+```
+From the cluster results, we can see that the locations are not divided very reasonably by the k-means cluster method. It may need other methods to analysis the influence of location.
+
+3.Application of different MVA models
+The multiple regression model can be used for price prediction.
+```{r}
+# Process categories variables
+DataSetMR <- DataSet
+DataSetMR$room_type <- as.factor(DataSetMR$room_type)
+DataSetMR$bed_type <- as.factor(DataSetMR$bed_type)
+DataSetMR$
+```
+The results show that DataSet is too small to get some logistic regression model.
+```{r}
+
+
+```
+

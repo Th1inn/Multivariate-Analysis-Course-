@@ -1,0 +1,76 @@
+---
+title: "Social_LDA"
+author: "tonghua.lin@rutgers.edu"
+date: "4/24/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+For this data set, I want to divide the groups by trouble sleep.
+```{r}
+library(readr)
+DataSet <- read_csv("Social Media.csv")
+DataSet$'Application type(Social media, OTT, Learning)'<-NULL
+#drop the string column and all APP Yes/No column since time=0 means No
+DataSet$Linkedin <- NULL
+DataSet$Whatsapp <- NULL
+DataSet$ApplicationType <- NULL
+DataSet$Instagram <- NULL
+DataSet$Snapchat <- NULL
+DataSet$Twitter <- NULL
+DataSet$Youtube <- NULL
+DataSet$OTT <- NULL
+DataSet$Reddit <-NULL
+DataSet$ID <- NULL
+
+
+#change the unit of hms variables to minutes
+hms_columns <- sapply(DataSet, inherits, "hms")
+DataSet[hms_columns] <- lapply(DataSet[hms_columns], function(x) as.numeric(x) / 60)
+print(DataSet)
+```
+Since all variables are numerical, we can directly divide the train set and run the LDA.
+```{r}
+library(MASS)
+smp_size_raw <- floor(0.75 * nrow(DataSet))
+train_ind_raw <- sample(nrow(DataSet), size = smp_size_raw)
+train_raw <- as.data.frame(DataSet[train_ind_raw, ])
+test_raw <- as.data.frame(DataSet[-train_ind_raw, ])
+
+DataSet.lda <- lda(formula = train_raw$TroubleSleep ~ ., data = train_raw)
+summary(DataSet.lda)
+print(DataSet.lda)
+plot(DataSet.lda)
+```
+From the plot, we can see quite large difference from their residuals. Let's run the test prediction to check the accuracy.
+```{r}
+DataSet.lda.predict <- predict(DataSet.lda, newdata = test_raw)
+DataSet.lda.predict$class
+DataSet.lda.predict$x
+```
+
+```{r}
+library(ROCR)
+library(dplyr)
+library(ggplot2)
+library(memisc)
+DataSet.lda.predict.posteriors <- as.data.frame(DataSet.lda.predict$posterior)
+
+pred <- prediction(DataSet.lda.predict.posteriors[,2], test_raw$TroubleSleep)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+plot(roc.perf)
+abline(a=0, b= 1)
+text(x = .25, y = .65 ,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+```
+Quite accurate. But when I try to rerun the code, the result changes. I think it's because of the size of the data set. It's too small.
+
+
