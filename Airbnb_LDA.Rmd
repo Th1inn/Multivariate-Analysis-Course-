@@ -1,0 +1,104 @@
+---
+title: "Airbnb_price_analysis"
+author: "tonghua.lin@rutgers.edu"
+date: "4/24/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+This is a new data set I found. It's about the Airbnb lodges. The data set contains 29 columns and around 73000 rows. I want to use LDA to identify a lodge's room type. Firstly, we have to read and clean up the data set.
+
+```{r}
+library(readr)
+DataSet <- read_csv("Airbnb_Data.csv")
+# Set the ID as the name of rows, exclude non-numerical columns
+DataSet$id <- NULL
+DataSet$property_type <- NULL
+DataSet$amenities <- NULL
+DataSet$description <- NULL
+DataSet$name <- NULL
+DataSet$thumbnail_url <- NULL
+DataSet$neighbourhood <- NULL
+DataSet$zipcode <-NULL
+DataSet$bed_type <-NULL
+DataSet$cancellation_policy <-NULL
+DataSet$cleaning_fee <- NULL
+DataSet$city <- NULL
+DataSet$host_has_profile_pic <-NULL
+DataSet$instant_bookable <-NULL
+
+
+head(DataSet)
+# Check the NA data rows
+sapply(DataSet, function(x) sum(is.na(x)))
+```
+From the NA check, we can see that there are lots of missing data. For bathrooms, we can set NA as 0. For first_review data, there are many NAs. That means they are never rented out, or no one give a review. Similar situation can be found in last_review, host_response_rate, review_score_rating. We can use the host_since date for the missing part. For the NA in host_since, we can see then number of missing rows is exactly same with host_identity_verified, and it's small. Let's drop these rows. For date variables, we can use 2017/11/01 as the baseline to calculate the interval. It can change the date variables to numerical variables. 
+```{r}
+# Remove rows with na host_identity_verified
+DataSet <- DataSet[!DataSet$room_type=="Shared room",]
+DataSet <- DataSet[!is.na(DataSet$host_identity_verified),]
+DataSet$host_identity_verified <-NULL
+# Set na bathrooms to 0
+DataSet$bathrooms[is.na(DataSet$bathrooms)] <- 0
+# Use the host_since date for the na date
+DataSet$first_review[is.na(DataSet$first_review)] <- DataSet$host_since[is.na(DataSet$first_review)]
+DataSet$last_review[is.na(DataSet$last_review)] <- DataSet$host_since[is.na(DataSet$last_review)]
+baslineDate <- as.Date('2017/11/01')
+DataSet$first_review <- as.numeric(difftime(baslineDate, DataSet$first_review, units = "days"))
+DataSet$last_review <- as.numeric(difftime(baslineDate, DataSet$last_review, units = "days"))
+DataSet$host_since <- as.numeric(difftime(baslineDate, DataSet$host_since, units = "days"))
+# Use mean for na host_response_rate and scores
+DataSet$host_response_rate <- as.numeric(gsub("%", "", DataSet$host_response_rate))
+DataSet$host_response_rate[is.na(DataSet$host_response_rate)] <- mean(DataSet$host_response_rate[!is.na(DataSet$host_response_rate)])
+DataSet$review_scores_rating[is.na(DataSet$review_scores_rating)] <- mean(DataSet$review_scores_rating[!is.na(DataSet$review_scores_rating)])
+DataSet$bedrooms[is.na(DataSet$bedrooms)] <- 1
+DataSet$beds[is.na(DataSet$beds)] <- round(mean(DataSet$beds[!is.na(DataSet$beds)]))
+sapply(DataSet, function(x) sum(is.na(x)))
+```
+After clean up the na data, we can set the room_type as numerical variable and start LDA.
+```{r}
+library(MASS)
+DataSet_raw <- cbind(DataSet, as.numeric(as.factor(DataSet$room_type))-1)
+DataSet_raw$room_type<-NULL
+colnames(DataSet_raw)[14] <- "room_type"
+str(DataSet_raw)
+smp_size_raw <- floor(0.75 * nrow(DataSet_raw))
+train_ind_raw <- sample(nrow(DataSet_raw), size = smp_size_raw)
+train_raw <- as.data.frame(DataSet_raw[train_ind_raw, ])
+test_raw <- as.data.frame(DataSet_raw[-train_ind_raw, ])
+DataSet_raw.lda <- lda(formula = train_raw$room_type ~ ., data = train_raw)
+summary(DataSet_raw.lda)
+print(DataSet_raw.lda)
+plot(DataSet_raw.lda)
+```
+From the result, we can see that group 0 and group 1, namely Entire home/apartment and private room, can not be differentiated very clearly. Still, they have some differences. By the probabilities of groups, we can get about 57% rows distinguished. We also can check the means of different variables' differences. Let's predict the test set and check the accuracy.
+```{r}
+DataSet_raw.lda.predict <- predict(DataSet_raw.lda, newdata = test_raw)
+DataSet_raw.lda.predict$class[1:100]
+DataSet_raw.lda.predict$x[1:100]
+```
+We can check the accuracy by the plot.
+```{r}
+library(ROCR)
+library(dplyr)
+library(ggplot2)
+library(memisc)
+DataSet_raw.lda.predict.posteriors <- as.data.frame(DataSet_raw.lda.predict$posterior)
+
+pred <- prediction(DataSet_raw.lda.predict.posteriors[,2], test_raw$room_type)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+plot(roc.perf)
+abline(a=0, b= 1)
+text(x = .25, y = .65 ,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+```
+The result of LDA is quite well. The accuracy can reach 91%.
+
