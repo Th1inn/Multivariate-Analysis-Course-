@@ -1,0 +1,203 @@
+---
+title: "Social_Project"
+author: "tonghua.lin@rutgers.edu"
+date: "4/28/2024"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+These is a project from the course Multivariable Analysis. It's a project about the influence of social media.
+
+1.Explain the data collection process
+The data set is collected from the class. It originally contains 25 columns and around 21 rows, which is quite small. The variables include time spent in different types of apps and several outcomes, such as trouble sleep and weekly feelings.
+```{r}
+library(readr)
+DataSet <- read_csv("Social Media.csv")
+print(DataSet)
+DataSet$'Application type(Social media, OTT, Learning)'<-NULL
+print(DataSet)
+```
+To clean up the data, we can exclude some Yes/No columns about the usage of different apps, since we can get the usage situation from the time spending variables. Also, we need to change time variables to numerical variables for further analysis.
+```{r}
+#drop the string column and all APP Yes/No column since time=0 means No
+DataSet$Linkedin <- NULL
+DataSet$Whatsapp <- NULL
+DataSet$ApplicationType <- NULL
+DataSet$Instagram <- NULL
+DataSet$Snapchat <- NULL
+DataSet$Twitter <- NULL
+DataSet$Youtube <- NULL
+DataSet$OTT <- NULL
+DataSet$Reddit <-NULL
+
+#change the unit of hms variables to minutes
+hms_columns <- sapply(DataSet, inherits, "hms")
+DataSet[hms_columns] <- lapply(DataSet[hms_columns], function(x) as.numeric(x) / 60)
+print(DataSet)
+```
+2.Exploratory Data Analysis and Visualizations
+Several methods can be used to do preliminary analysis and visualizations. We can check the mean and variance first.
+```{r}
+#MVA analysis after scaling, cm~0 after scaling
+DataSetScaled <- scale(DataSet[-1])
+S <- cov(DataSetScaled)
+d <- apply(DataSetScaled, MARGIN = 1, function(x)t(x) %*% solve(S) %*% (x))
+S
+d
+
+```
+Also, there are some multi variable visualizations.
+```{r}
+#some visualization
+stars(DataSetScaled)
+pairs(DataSetScaled)
+```
+For further analysis the validation of variables, we can run a factor analysis.
+```{r}
+#Factor Analysis
+library(psych)
+fa.parallel(DataSetScaled) 
+#We can see that 3 ~ 5 RCs are good choices.
+fit <- principal(DataSetScaled,nfactors=5,rotate="varimax")
+fit
+fit$loadings
+fa.plot(fit)
+#From the factor model, RC1 can be named as high intensity exercise, while RC2 and RC3 is lightly exercise and lie down repectively
+fa.diagram(fit)
+```
+We can using 5 factors to represent the original data. RC1-Social Media time; RC2-Weekly feelings RC3-Learning apps time and result; RC4-Entertaining apps time; RC5-Networking result
+
+3.Application of different MVA models
+Now, let's run a cluster analysis.
+```{r}
+#cluster analysis
+
+#use hierarchical model first.
+row.names(DataSetScaled) <- DataSet$ID
+SocialDist <- dist(DataSetScaled, method="euclidean")
+clusSocial <- hclust(SocialDist, method = "single") 
+plot(as.dendrogram(clusSocial),ylab="Distance between Month",ylim=c(0,6),main="Dendrogram of Month (method = single)")
+#its hard to see a good group choice, maybe 5 groups, namely first 4 ID and the remaing right part
+
+#try K-means for a best result
+#set the range of cluster numbers
+min_clusters <- 2
+max_clusters <- 20
+
+#initialize a vector to store the percentage of variance explained
+Variance_List <- numeric(max_clusters - min_clusters + 1)
+
+#loop over the range of cluster numbers
+for (k in min_clusters:max_clusters) {
+  set.seed(123)  # Set a seed for reproducibility
+  kmeans_result <- kmeans(DataSetScaled, centers = k, nstart = 10)
+  perc <- round(100 * (1 - kmeans_result$betweenss / kmeans_result$totss), 1)
+  Variance_List[k - min_clusters + 1] <- perc
+  cat("Variance explained for", k, "clusters:", perc, "%\n")
+}
+
+plot(min_clusters:max_clusters, Variance_List, type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Percentage of Variance Explained",
+     main = "Elbow Plot for K-means Clustering")
+
+
+```
+Obviously, 5~8 groups are the best choices.
+```{r}
+library(factoextra)
+library(FactoMineR)
+library(ggfortify)
+library(psych)
+library(corrplot)
+library(devtools)
+kmeans5 <- kmeans(DataSetScaled,5,nstart = 10)
+
+#saving four k-means clusters in a list
+clus1 <- matrix(names(kmeans5$cluster[kmeans5$cluster == 1]), 
+                ncol=1, nrow=length(kmeans5$cluster[kmeans5$cluster == 1]))
+colnames(clus1) <- "Cluster 1"
+clus2 <- matrix(names(kmeans5$cluster[kmeans5$cluster == 2]), 
+                ncol=1, nrow=length(kmeans5$cluster[kmeans5$cluster == 2]))
+colnames(clus2) <- "Cluster 2"
+clus3 <- matrix(names(kmeans5$cluster[kmeans5$cluster == 3]), 
+                ncol=1, nrow=length(kmeans5$cluster[kmeans5$cluster == 3]))
+colnames(clus3) <- "Cluster 3"
+clus4 <- matrix(names(kmeans5$cluster[kmeans5$cluster == 4]), 
+                ncol=1, nrow=length(kmeans5$cluster[kmeans5$cluster == 4]))
+colnames(clus4) <- "Cluster 4"
+clus5 <- matrix(names(kmeans5$cluster[kmeans5$cluster == 5]), 
+                ncol=1, nrow=length(kmeans5$cluster[kmeans5$cluster == 5]))
+colnames(clus5) <- "Cluster 5"
+list(clus1,clus2,clus3,clus4,clus5)
+
+fviz_cluster(kmeans5, data = DataSetScaled,
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal())
+```
+Lets check the means difference between groups, especial the feeling of week.
+```{r}
+means_list <- lapply(1:5, function(k) {
+  cluster_rows <- which(kmeans5$cluster == k)
+  colMeans(DataSet[cluster_rows, c('LearningItem','Mood','TiredWakeUP','TroubleSleep','WeekFelt')])
+})
+
+names(means_list) <- paste("Cluster", 1:5)
+means_list
+
+#we can see some groups are wield, like gourp 5, only one ID, no Tired thing but WeekFelt is 2,
+#I think this is some kind of mistype and should be excluded.
+#In group 3, we can see that they have good sleep condition and high WeekFelt, we can check
+#their App usage after.Group 2 have a bad sleep, which may mean they use social media too much.
+
+means_list <- lapply(1:5, function(k) {
+  cluster_rows <- which(kmeans5$cluster == k)
+  colMeans(DataSet[cluster_rows, c('InsTime','WhatsappTime','LinkedinTime','OTTTime','TwitterTime')])
+})
+
+names(means_list) <- paste("Cluster", 1:5)
+means_list
+#The result turns out counter-intuitively that group 2 use less social media, but group 3
+#is good in a week with more social media using time. I suppose some other thing influenced their feeling.
+#And maybe group 3 is just too busy in their lives. By the way I'm in group 2.
+```
+Also, the multiple regression can be used to predict the weekly feelings.
+```{r}
+fit <- lm(WeekFelt~InsTime+LinkedinTime+TwitterTime+WhatsappTime+OTTTime+JobInterview+LearningItem+TiredWakeUP, data=DataSet)
+#show the results
+summary(fit)
+coefficients(fit)
+```
+With the result, we can see the R-squared value of the model is 0.70, which is a acceptable result. Also, most of remaining variables are significant. Now, we can run a residual analysis.
+```{r}
+#start a residual analysis
+confint(fit,level=0.95)
+fitted(fit)
+residuals(fit)
+#Anova Table
+anova(fit)
+vcov(fit)
+cov2cor(vcov(fit))
+temp <- influence.measures(fit)
+temp
+plot(fit)
+```
+
+4.Model Insights
+Before we do the MVA, we need to drop several data columns, especially with all same value.And after dropping and scaling, the distance between rows are quite large, proving that we can do some analysis to find valuable information.
+
+We can cluster the whole class to 5 groups. Some groups are just mistyping, but some of them can provide interesting things. For example, the group 2 uses less social media but feels tired and has a bad sleep. While the group 3 uses a lot of social media but still feels good in a week. The result is quite counter-intuitive and may need more analysis. I think the other factors in lives influence both the social media using-time, sleep, and the weekly feeling.
+
+5.Learnings and Takeaways
+The usage of various types of apps does not necessarily led to bad sleep and bad week feelings.Sometimes other factors in life will take much time, reducing the smartphone using time as well as making people tired.
+
+
+
